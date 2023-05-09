@@ -4,12 +4,14 @@ WORKDIR /app
 
 COPY . /app
 
-RUN go get github.com/yanzay/tbot/v2
+RUN go get github.com/bwmarrin/discordgo
 
-RUN CGO_ENABLED=0 go build -v -o TelegramBridge .
+RUN CGO_ENABLED=0 go build -v -o DiscordBridge .
 
 FROM alpine:latest
 
-COPY --from=builder /app/TelegramBridge /TelegramBridge
+COPY --from=builder /app/DiscordBridge /DiscordBridge
 
-ENTRYPOINT ["/TelegramBridge"]
+ENTRYPOINT ["/DiscordBridge"]
+
+
