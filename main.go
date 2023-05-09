@@ -3,11 +3,10 @@ package main
 import (
 	"fmt"
 	"log"
-	"net/http"
 	"os"
 	"strings"
 
-	"github.com/yanzay/tbot/v2"
+	"github.com/bwmarrin/discordgo"
 )
 
 func composer(status, event, actor, repo, workflow, link string) string {
@@ -22,15 +21,15 @@ func composer(status, event, actor, repo, workflow, link string) string {
 
 	replacer := strings.NewReplacer("_", "\\_", "-", "\\-", ".", "\\.")
 
-	// removing symbols to avoide markdown parser error
+	// removing symbols to avoid markdown parser error
 	event = replacer.Replace(event)
 
 	repo = replacer.Replace(repo)
 
 	actor = replacer.Replace(actor)
-	
+
 	// Message text composing
-	text = icons[strings.ToLower(status)] + "  *" + strings.ToUpper(event) + "*\n"
+	text = icons[strings.ToLower(status)] + "  **" + strings.ToUpper(event) + "**\n"
 	text += "was made at " + repo + " \nby " + actor + "\n"
 	text += "Check here " + "[" + workflow + "](" + link + ")"
 
@@ -53,16 +52,24 @@ func linkgen(repo, event string) string {
 	return fmt.Sprintf("https://github.com/%s/%s/", repo, event)
 }
 
+func sendToDiscord(discord *discordgo.Session, channelID, message string) error {
+	_, err := discord.ChannelMessageSend(channelID, message)
+	if err != nil {
+		return fmt.Errorf("unable to send message to Discord channel: %v", err)
+	}
+	return nil
+}
+
 func main() {
 
 	var (
 		// inputs provided by Github Actions runtime
 		// should be defined in the action.yml
-		token  = os.Getenv("INPUT_TOKEN")
-		chat   = os.Getenv("INPUT_CHAT")
-		status = os.Getenv("INPUT_STATUS")
-		event  = os.Getenv("INPUT_EVENT")
-		actor  = os.Getenv("INPUT_ACTOR")
+		token   = os.Getenv("INPUT_TOKEN")
+		channel = os.Getenv("INPUT_CHANNEL")
+		status  = os.Getenv("INPUT_STATUS")
+		event   = os.Getenv("INPUT_EVENT")
+		actor   = os.Getenv("INPUT_ACTOR")
 
 		// github environment context
 		workflow = os.Getenv("GITHUB_WORKFLOW")
@@ -70,8 +77,18 @@ func main() {
 		// commit   = os.Getenv("GITHUB_SHA")
 	)
 
-	// Create Telegram client using token
-	c := tbot.NewClient(token, http.DefaultClient, "https://api.telegram.org")
+	// Create a new Discord session using bot token
+	discord, err := discordgo.New("Bot " + token)
+	if err != nil {
+		log.Fatalf("unable to create Discord session: %v", err)
+	}
+
+	// Open a websocket connection to Discord
+	err = discord.Open()
+	if err != nil {
+		log.Fatalf("unable to open Discord websocket connection: %v", err)
+	}
+	defer discord.Close()
 
 	// link to the commit
 	link := linkgen(repo, event)
@@ -79,9 +96,9 @@ func main() {
 	// Prepare message to send
 	msg := composer(status, event, actor, repo, workflow, link)
 
-	// Send to chat using Markdown format
-	_, err := c.SendMessage(chat, msg, tbot.OptParseModeMarkdown)
+	// Send message to Discord channel
+	err = sendToDiscord(discord, channel, msg)
 	if err != nil {
-		log.Fatalf("unable to send message: %v", err)
+		log.Fatalf("unable to send message to Discord channel: %v", err)
 	}
 }
